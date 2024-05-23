@@ -20,7 +20,5 @@
 # Ignore user-specific files
 *.DS_Store
 
-*.data1.parquet
-*.data2.parquet
-*.filtered highways traffic data.csv
-*.weather_stations.csv
+*.csv
+*.parquet
