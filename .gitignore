@@ -20,6 +20,8 @@
 # Ignore user-specific files
 *.DS_Store
 
+/datasets
+
 *.csv
 *.parquet
 
