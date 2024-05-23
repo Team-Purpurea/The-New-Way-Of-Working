@@ -22,3 +22,8 @@
 
 *.csv
 *.parquet
+
+data1.parquet
+data2.parquet
+filtered highways traffic data.csv
+weather_stations.csv
