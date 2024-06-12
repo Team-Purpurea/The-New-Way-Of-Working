@@ -283,71 +283,40 @@ def generate_custom_schedule(preferences):
         if office_day in remaining_days:
             remaining_days.remove(office_day)
 
-    # Predict waiting times for client days
-    available_days = set(remaining_days)
-    client_routes = df_wouter[(df_wouter['start'] == 'home') & (df_wouter['arrival'] == 'client')]
-    routes = client_routes[['route1', 'route2']].drop_duplicates()
-    routes['Route'] = routes.apply(lambda x: f"{x['route1']}+{x['route2']}" if x['route2'] != 0 else str(x['route1']), axis=1)
-
-    client_days_of_week = pd.DataFrame({
-        'RouteNum': np.repeat(routes['route1'].values, len(available_days)),
-        'FileSeverity': [default_values['FileSeverity']] * len(routes) * len(available_days),
-        'TrafficSeverityNormalized': [default_values['TrafficSeverityNormalized']] * len(routes) * len(available_days),
-        'WeatherCode': [default_values['WeatherCode']] * len(routes) * len(available_days),
-        'DayOfWeek': np.tile(list(available_days), len(routes)),
-        'Route': np.repeat(routes['Route'].values, len(available_days))
-    })
-
-    client_days_of_week = client_days_of_week[['RouteNum', 'FileSeverity', 'TrafficSeverityNormalized', 'WeatherCode', 'DayOfWeek', 'Route']]  # Ensure correct order and include 'Route'
-    client_days_of_week['predicted_waiting_time'] = model.predict(client_days_of_week[['RouteNum', 'FileSeverity', 'TrafficSeverityNormalized', 'WeatherCode', 'DayOfWeek']])
-
-    client_days_of_week['base_travel_time'] = client_days_of_week.apply(
-        lambda x: get_base_travel_time(x['RouteNum'], int(x['Route'].split('+')[1]) if '+' in x['Route'] else 0), axis=1
-    )
-    client_days_of_week = client_days_of_week.dropna(subset=['base_travel_time'])
-    client_days_of_week['total_travel_time'] = client_days_of_week['predicted_waiting_time'] + client_days_of_week['base_travel_time']
-    client_days_of_week['Day'] = client_days_of_week['DayOfWeek'].map(day_name_mapping)
-
-    # Find the best two unique days to go to the client
-    best_client_days = client_days_of_week.sort_values(by='total_travel_time').drop_duplicates(subset=['DayOfWeek']).head(2)
-
-    final_client_days = set()
-    for _, best_client_day in best_client_days.iterrows():
-        route1, route2 = map(int, best_client_day['Route'].split('+')) if '+' in best_client_day['Route'] else (int(best_client_day['Route']), 0)
-        route_length = df_wouter[(df_wouter['route1'] == route1) & (df_wouter['route2'] == route2)]['total_lenght(km)'].values[0]
+    # Add client days to schedule
+    for client_day in client_days:
         schedule.append({
-            "Day": best_client_day['Day'],
+            "Day": day_name_mapping[client_day],
             "From": "Home",
             "To": "Client",
-            "Route": best_client_day['Route'],
-            "Length": route_length,
-            "BaseTravelTime": get_base_travel_time(route1, route2),
-            "PredictedWaitingTime": best_client_day['predicted_waiting_time'],
-            "TotalTravelTime": best_client_day['total_travel_time']
+            "Route": "2+50",  # Assuming default client route 2+50
+            "Length": df_wouter[(df_wouter['route1'] == 2) & (df_wouter['route2'] == 50)]['total_lenght(km)'].values[0],
+            "BaseTravelTime": get_base_travel_time(2, 50),
+            "PredictedWaitingTime": get_predicted_travel_time(client_day, 2, 50),
+            "TotalTravelTime": get_total_travel_time(client_day, 2, 50)
         })
-        final_client_days.add(best_client_day['DayOfWeek'])
+        if client_day in remaining_days:
+            remaining_days.remove(client_day)
 
     # Add home days to schedule
     final_home_days = set(home_days)
-    if len(final_client_days) < 2:
-        available_days = set(remaining_days) - final_client_days
-        additional_client_days = sorted(available_days, key=lambda day: get_total_travel_time(day, 1))[:2-len(final_client_days)]
+    if len(client_days) < 2:
+        available_days = set(remaining_days) - set(client_days)
+        additional_client_days = sorted(available_days, key=lambda day: get_total_travel_time(day, 1))[:2-len(client_days)]
         for day in additional_client_days:
-            final_client_days.add(day)
-            route1, route2 = 2, 50  # Assuming a default client route
-            route_length = df_wouter[(df_wouter['route1'] == route1) & (df_wouter['route2'] == route2)]['total_lenght(km)'].values[0]
+            client_days.append(day)
             schedule.append({
                 "Day": day_name_mapping[day],
                 "From": "Home",
                 "To": "Client",
-                "Route": f"{route1}+{route2}",
-                "Length": route_length,
-                "BaseTravelTime": get_base_travel_time(route1, route2),
-                "PredictedWaitingTime": get_predicted_travel_time(day, route1),
-                "TotalTravelTime": get_total_travel_time(day, route1)
+                "Route": "2+50",
+                "Length": df_wouter[(df_wouter['route1'] == 2) & (df_wouter['route2'] == 50)]['total_lenght(km)'].values[0],
+                "BaseTravelTime": get_base_travel_time(2, 50),
+                "PredictedWaitingTime": get_predicted_travel_time(day, 2, 50),
+                "TotalTravelTime": get_total_travel_time(day, 2, 50)
             })
 
-    final_home_days.update(set(days_of_week) - {office_day} - final_client_days)
+    final_home_days.update(set(days_of_week) - {office_day} - set(client_days))
     for home_day in final_home_days:
         schedule.append({
             "Day": day_name_mapping[home_day],
@@ -364,6 +333,7 @@ def generate_custom_schedule(preferences):
     schedule = sorted(schedule, key=lambda x: inverse_day_name_mapping[x['Day']])
 
     return schedule
+
 
 def get_base_travel_time(route1, route2):
     matching_rows = df_wouter[(df_wouter['route1'] == route1) & (df_wouter['route2'] == route2)]
