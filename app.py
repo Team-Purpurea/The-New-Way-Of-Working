@@ -8,6 +8,10 @@ import plotly.graph_objects as go
 
 app = Flask(__name__)
 
+# Define day mappings
+day_name_mapping = {0: 'Monday', 1: 'Tuesday', 2: 'Wednesday', 3: 'Thursday', 4: 'Friday'}
+inverse_day_name_mapping = {v: k for k, v in day_name_mapping.items()}
+
 # Load your model and data here
 def load_model_and_data():
     # Load the pre-trained model
@@ -45,7 +49,7 @@ def load_model_and_data():
 
 model, df_wouter, default_values, features = load_model_and_data()
 
-day_name_mapping = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4}
+day_name_mapping = {0: 'Monday', 1: 'Tuesday', 2: 'Wednesday', 3: 'Thursday', 4: 'Friday'}
 office_day_mapping = {v: k for k, v in day_name_mapping.items()}
 
 def get_base_travel_time(route1, route2):
@@ -73,7 +77,7 @@ def generate_schedule():
 
     office_days_of_week['base_travel_time'] = get_base_travel_time(2, 0)
     office_days_of_week['total_travel_time'] = office_days_of_week['predicted_waiting_time'] + office_days_of_week['base_travel_time']
-    office_days_of_week['Day'] = office_days_of_week['DayOfWeek'].map(office_day_mapping)
+    office_days_of_week['Day'] = office_days_of_week['DayOfWeek'].map(day_name_mapping)
 
     # Find the best day to go to the office
     best_office_day = office_days_of_week.sort_values(by='total_travel_time').iloc[0]
@@ -115,11 +119,7 @@ def generate_schedule():
     )
     client_days_of_week = client_days_of_week.dropna(subset=['base_travel_time'])
     client_days_of_week['total_travel_time'] = client_days_of_week['predicted_waiting_time'] + client_days_of_week['base_travel_time']
-    client_days_of_week['Day'] = client_days_of_week['DayOfWeek'].map(office_day_mapping)
-
-    # Debugging: Print available days for client travel
-    print("Available days for client travel:", available_days)
-    print("Client days of week predictions:\n", client_days_of_week[['Day', 'Route', 'total_travel_time']])
+    client_days_of_week['Day'] = client_days_of_week['DayOfWeek'].map(day_name_mapping)
 
     # Find the best two unique days to go to the client
     best_client_days = client_days_of_week.sort_values(by='total_travel_time').drop_duplicates(subset=['DayOfWeek']).head(2)
@@ -138,18 +138,12 @@ def generate_schedule():
                 "TotalTravelTime": best_client_day['total_travel_time']
             })
 
-    # Debugging: Print the initial schedule with client days
-    print("Initial schedule with client days:\n", schedule)
-
     # Ensure two unique days for the client
     client_days_added = len([entry for entry in schedule if entry['To'] == 'Client'])
     if client_days_added < 2:
         remaining_client_days = client_days_of_week[~client_days_of_week['Day'].isin([d['Day'] for d in schedule])]
         additional_client_days_needed = 2 - client_days_added
         additional_client_days = remaining_client_days.sort_values(by='total_travel_time').head(additional_client_days_needed)
-
-        # Debugging: Print remaining client days
-        print("Remaining client days for selection:\n", remaining_client_days[['Day', 'Route', 'total_travel_time']])
 
         for _, additional_client_day in additional_client_days.iterrows():
             route_length = df_wouter[(df_wouter['route1'] == additional_client_day['RouteNum']) & (df_wouter['route2'] == int(additional_client_day['Route'].split('+')[1]) if '+' in additional_client_day['Route'] else 0)]['total_lenght(km)']
@@ -165,11 +159,8 @@ def generate_schedule():
                     "TotalTravelTime": additional_client_day['total_travel_time']
                 })
 
-    # Debugging: Print the schedule after ensuring two client days
-    print("Schedule after ensuring two client days:\n", schedule)
-
     # Determine home days
-    all_days = set(day_name_mapping.keys())
+    all_days = set(day_name_mapping.values())
     office_and_client_days = {best_office_day['Day']} | set([d['Day'] for d in schedule if d['To'] == 'Client'])
     home_days = all_days - office_and_client_days
 
@@ -186,7 +177,7 @@ def generate_schedule():
         })
 
     # Sort the schedule by day of the week
-    schedule = sorted(schedule, key=lambda x: day_name_mapping[x['Day']])
+    schedule = sorted(schedule, key=lambda x: office_day_mapping[x['Day']])
 
     # Create Plotly plots for office and client
     # Plot for office
@@ -209,182 +200,166 @@ def generate_schedule():
 
     return schedule, office_plot_html, client_plot_html
 
-def generate_preferred_schedule(user_preferences):
+
+
+def generate_custom_schedule(preferences):
+    print("Received preferences:", preferences)
     # Initialize schedule list
     schedule = []
-    remaining_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-    
-    # Remove selected days from weekdays
-    for day, preference in user_preferences.items():
-        if preference == 'Day to Stay Home':
-            remaining_days.remove(day)
+    days_of_week = list(day_name_mapping.keys())
 
-    # Case 1: Two selections for 'Day to Stay Home'
-    if list(user_preferences.values()).count('Day to Stay Home') == 2:
-        pass  # No predictions, just skip these two days
+    # Apply user preferences
+    home_days = [inverse_day_name_mapping[day] for day, pref in preferences.items() if pref == 'Home']
+    office_day = next((inverse_day_name_mapping[day] for day, pref in preferences.items() if pref == 'Office'), None)
+    client_days = [inverse_day_name_mapping[day] for day, pref in preferences.items() if pref == 'Client']
 
-    # Case 2: One selection for 'Day to Stay Home' and nothing else
-    elif list(user_preferences.values()).count('Day to Stay Home') == 1 and len([v for v in user_preferences.values() if v != 'Day to Stay Home']) == 0:
-        remaining_days.remove(next(iter(user_preferences.keys())))
-        # Find the fastest office day
-        best_office_day = predict_office_days_of_week(remaining_days)
-        schedule.append({"Day": best_office_day, "From": "Home", "To": "Office"})
-        remaining_days.remove(best_office_day)
-        # Find the fastest two client days
-        fastest_client_days = predict_client_days(remaining_days).head(2)
-        for day in fastest_client_days:
-            schedule.append({"Day": day, "From": "Home", "To": "Client"})
-            remaining_days.remove(day)
+    # Debugging information
+    print("Home days:", home_days)
+    print("Office day:", office_day)
+    print("Client days:", client_days)
 
-    # Case 3: One selection for 'Day to Stay Home' and one "Day to Go Office" selected
-    elif 'Day to Stay Home' in user_preferences.values() and 'Day to Go Office' in user_preferences.values():
-        home_day = next(key for key, value in user_preferences.items() if value == 'Day to Stay Home')
-        remaining_days.remove(home_day)
-        office_day = next(key for key, value in user_preferences.items() if value == 'Day to Go Office')
-        schedule.append({"Day": office_day, "From": "Home", "To": "Office"})
+    # Check constraints
+    if len(home_days) > 2 or (office_day and len(client_days) > 1):
+        raise ValueError("Invalid preferences provided")
+
+    # Logic for creating the schedule based on preferences
+    if len(home_days) == 2:
+        days_of_week = [day for day in days_of_week if day not in home_days]
+        office_day = office_day or min(days_of_week, key=lambda day: get_total_travel_time(day, 2))
+        days_of_week.remove(office_day)
+        client_days = client_days or sorted(days_of_week, key=lambda day: get_total_travel_time(day, 1))[:2]
+    elif len(home_days) == 1 and not office_day and not client_days:
+        days_of_week.remove(home_days[0])
+        office_day = min(days_of_week, key=lambda day: get_total_travel_time(day, 2))
+        days_of_week.remove(office_day)
+        client_days = sorted(days_of_week, key=lambda day: get_total_travel_time(day, 1))[:2]
+    elif len(home_days) == 1 and office_day:
+        days_of_week.remove(home_days[0])
+        client_days = client_days or sorted([day for day in days_of_week if day != office_day], key=lambda day: get_total_travel_time(day, 1))[:2]
+    elif len(home_days) == 1 and client_days:
+        days_of_week.remove(home_days[0])
+        office_day = office_day or min([day for day in days_of_week if day not in client_days], key=lambda day: get_total_travel_time(day, 2))
+        remaining_days = [day for day in days_of_week if day not in client_days and day != office_day]
+        client_days = client_days + sorted(remaining_days, key=lambda day: get_total_travel_time(day, 1))[:2-len(client_days)]
+    elif office_day and client_days:
+        remaining_days = [day for day in days_of_week if day != office_day and day not in client_days]
+        client_days = client_days + sorted(remaining_days, key=lambda day: get_total_travel_time(day, 1))[:2-len(client_days)]
+    elif office_day:
+        remaining_days = [day for day in days_of_week if day != office_day]
+        client_days = sorted(remaining_days, key=lambda day: get_total_travel_time(day, 1))[:2]
+    elif len(client_days) == 2:
+        office_day = min([day for day in days_of_week if day not in client_days], key=lambda day: get_total_travel_time(day, 2))
+    elif len(client_days) == 1:
+        remaining_days = [day for day in days_of_week if day not in client_days]
+        office_day = min(remaining_days, key=lambda day: get_total_travel_time(day, 2))
         remaining_days.remove(office_day)
-        # Find the fastest two client days
-        fastest_client_days = predict_client_days(remaining_days).head(2)
-        for day in fastest_client_days:
-            schedule.append({"Day": day, "From": "Home", "To": "Client"})
-            remaining_days.remove(day)
+        client_days.append(min(remaining_days, key=lambda day: get_total_travel_time(day, 1)))
+    else:
+        raise ValueError("Invalid preferences provided")
 
-    # Case 4: One selection for 'Day to Stay Home' and one "Day to Go Client" selected
-    elif 'Day to Stay Home' in user_preferences.values() and 'Day to Go Client' in user_preferences.values():
-        home_day = next(key for key, value in user_preferences.items() if value == 'Day to Stay Home')
-        remaining_days.remove(home_day)
-        client_day = next(key for key, value in user_preferences.items() if value == 'Day to Go Client')
-        schedule.append({"Day": client_day, "From": "Home", "To": "Client"})
-        remaining_days.remove(client_day)
-        # Find the fastest day to office from remaining days
-        best_office_day = predict_office_days_of_week(remaining_days)
-        schedule.append({"Day": best_office_day, "From": "Home", "To": "Office"})
-        remaining_days.remove(best_office_day)
-        # Find the fastest day to client
-        fastest_client_day = predict_client_days(remaining_days).iloc[0]
-        schedule.append({"Day": fastest_client_day, "From": "Home", "To": "Client"})
-        remaining_days.remove(fastest_client_day)
+    # Debugging information
+    print("Final Office day:", office_day)
+    print("Final Client days:", client_days)
+    print("Remaining Home days:", [day for day in days_of_week if day not in [office_day] + client_days])
 
-    # Case 5: One selection for 'Day to Office' and one "Day to Go Client" selected
-    elif 'Day to Go Client' in user_preferences.values() and 'Day to Office' in user_preferences.values():
-        office_day = next(key for key, value in user_preferences.items() if value == 'Day to Office')
-        schedule.append({"Day": office_day, "From": "Home", "To": "Office"})
-        remaining_days.remove(office_day)
-        client_day = next(key for key, value in user_preferences.items() if value == 'Day to Go Client')
-        schedule.append({"Day": client_day, "From": "Home", "To": "Client"})
-        remaining_days.remove(client_day)
-        # Find the fastest day to client
-        fastest_client_day = predict_client_days(remaining_days).iloc[0]
-        schedule.append({"Day": fastest_client_day, "From": "Home", "To": "Client"})
-        remaining_days.remove(fastest_client_day)
-
-    # Case 6: Only "Day to Office" selected and nothing else
-    elif 'Day to Office' in user_preferences.values() and list(user_preferences.values()).count('Day to Office') == 1:
-        office_day = next(key for key, value in user_preferences.items() if value == 'Day to Office')
-        schedule.append({"Day": office_day, "From": "Home", "To": "Office"})
-        remaining_days.remove(office_day)
-        # Find the fastest two days to client
-        fastest_client_days = predict_client_days(remaining_days).head(2)
-        for day in fastest_client_days:
-            schedule.append({"Day": day, "From": "Home", "To": "Client"})
-            remaining_days.remove(day)
-
-    # Case 7: Two selections for 'Day to Go Client'
-    elif list(user_preferences.values()).count('Day to Go Client') == 2:
-        client_days = [key for key, value in user_preferences.items() if value == 'Day to Go Client']
-        for day in client_days:
-            schedule.append({"Day": day, "From": "Home", "To": "Client"})
-            remaining_days.remove(day)
-        # Find the fastest office day from remaining days
-        best_office_day = predict_office_days_of_week(remaining_days)
-        schedule.append({"Day": best_office_day, "From": "Home", "To": "Office"})
-        remaining_days.remove(best_office_day)
-    
-    # Case 8: Only "Day to Go Client" selected and nothing else
-    elif 'Day to Go Client' in user_preferences.values() and list(user_preferences.values()).count('Day to Go Client') == 1:
-        client_day = next(key for key, value in user_preferences.items() if value == 'Day to Go Client')
-        schedule.append({"Day": client_day, "From": "Home", "To": "Client"})
-        remaining_days.remove(client_day)
-        # Find the fastest day to office from remaining days
-        best_office_day = predict_office_days_of_week(remaining_days)
-        schedule.append({"Day": best_office_day, "From": "Home", "To": "Office"})
-        remaining_days.remove(best_office_day)
-        # Find the fastest day to client
-        fastest_client_day = predict_client_days(remaining_days).iloc[0]
-        schedule.append({"Day": fastest_client_day, "From": "Home", "To": "Client"})
-        remaining_days.remove(fastest_client_day)
-
-# Ensure there are 2 client days
-    remaining_client_days = predict_client_days(remaining_days, exclude_day=None).head(2)
-    for day in remaining_client_days:
-        schedule.append({"Day": day, "From": "Home", "To": "Client"})
-        remaining_days.remove(day)
-
-    # Add remaining days as 'Day to Stay Home'
-    for day in remaining_days:
-        schedule.append({"Day": day, "From": "-", "To": "-", "Route": "-", "Length": "-", "BaseTravelTime": "-", "PredictedWaitingTime": "-", "TotalTravelTime": "-"})
-
-    return schedule
-
-# Helper function to find the fastest office day
-def predict_office_days_of_week(remaining_days):
-    # Predict waiting times for each day of the week for the office
-    office_days_of_week = pd.DataFrame({
-        'RouteNum': [2] * len(remaining_days),  # A2 for office
-        'FileSeverity': [default_values['FileSeverity']] * len(remaining_days),
-        'TrafficSeverityNormalized': [default_values.get('TrafficSeverityNormalized', np.nan)] * len(remaining_days),
-        'WeatherCode': [default_values['WeatherCode']] * len(remaining_days),
-        'DayOfWeek': remaining_days
+    # Add office day to schedule
+    schedule.append({
+        "Day": day_name_mapping[office_day],
+        "From": "Home",
+        "To": "Office",
+        "Route": "A2",
+        "Length": df_wouter[(df_wouter['route1'] == 2) & (df_wouter['route2'] == 0)]['total_lenght(km)'].values[0],
+        "BaseTravelTime": get_base_travel_time(2, 0),
+        "PredictedWaitingTime": get_predicted_travel_time(office_day, 2),
+        "TotalTravelTime": get_total_travel_time(office_day, 2)
     })
 
-    office_days_of_week = office_days_of_week[features]  # Ensure correct order
-    office_days_of_week['predicted_waiting_time'] = model.predict(office_days_of_week)
-
-    office_days_of_week['base_travel_time'] = get_base_travel_time(2, 0)
-    office_days_of_week['total_travel_time'] = office_days_of_week['predicted_waiting_time'] + office_days_of_week['base_travel_time']
-    office_days_of_week['Day'] = office_days_of_week['DayOfWeek'].map(office_day_mapping)
-
-    # Find the best day to go to the office
-    best_office_day = office_days_of_week.sort_values(by='total_travel_time').iloc[0]['Day']
-
-    return best_office_day
-
-# Function to predict waiting times for client days
-def predict_client_days(available_days, exclude_day=None):
-    # Encode days of the week as numeric values
-    day_mapping = {'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4}
-    available_days_numeric = [day_mapping[day] for day in available_days]
-
     # Predict waiting times for client days
+    available_days = set(days_of_week) - {office_day}
     client_routes = df_wouter[(df_wouter['start'] == 'home') & (df_wouter['arrival'] == 'client')]
-    if exclude_day:
-        available_days_numeric = [day for day in available_days_numeric if day != exclude_day]
     routes = client_routes[['route1', 'route2']].drop_duplicates()
     routes['Route'] = routes.apply(lambda x: f"{x['route1']}+{x['route2']}" if x['route2'] != 0 else str(x['route1']), axis=1)
 
     client_days_of_week = pd.DataFrame({
-        'RouteNum': np.repeat(routes['route1'].values, len(available_days_numeric)),
-        'FileSeverity': [default_values['FileSeverity']] * len(routes) * len(available_days_numeric),
-        'TrafficSeverityNormalized': [default_values.get('TrafficSeverityNormalized', np.nan)] * len(routes) * len(available_days_numeric),
-        'WeatherCode': [default_values['WeatherCode']] * len(routes) * len(available_days_numeric),
-        'DayOfWeek': np.tile(available_days_numeric, len(routes)),
-        'Route': np.repeat(routes['Route'].values, len(available_days_numeric))
+        'RouteNum': np.repeat(routes['route1'].values, len(available_days)),
+        'FileSeverity': [default_values['FileSeverity']] * len(routes) * len(available_days),
+        'TrafficSeverityNormalized': [default_values['TrafficSeverityNormalized']] * len(routes) * len(available_days),
+        'WeatherCode': [default_values['WeatherCode']] * len(routes) * len(available_days),
+        'DayOfWeek': np.tile(list(available_days), len(routes)),
+        'Route': np.repeat(routes['Route'].values, len(available_days))
     })
 
-    client_days_of_week = client_days_of_week[features + ['Route']]  # Ensure correct order and include 'Route'
-    client_days_of_week['predicted_waiting_time'] = model.predict(client_days_of_week[features])
+    client_days_of_week = client_days_of_week[['RouteNum', 'FileSeverity', 'TrafficSeverityNormalized', 'WeatherCode', 'DayOfWeek', 'Route']]  # Ensure correct order and include 'Route'
+    client_days_of_week['predicted_waiting_time'] = model.predict(client_days_of_week[['RouteNum', 'FileSeverity', 'TrafficSeverityNormalized', 'WeatherCode', 'DayOfWeek']])
 
     client_days_of_week['base_travel_time'] = client_days_of_week.apply(
         lambda x: get_base_travel_time(x['RouteNum'], int(x['Route'].split('+')[1]) if '+' in x['Route'] else 0), axis=1
     )
     client_days_of_week = client_days_of_week.dropna(subset=['base_travel_time'])
     client_days_of_week['total_travel_time'] = client_days_of_week['predicted_waiting_time'] + client_days_of_week['base_travel_time']
-    client_days_of_week['Day'] = client_days_of_week['DayOfWeek'].map(office_day_mapping)
+    client_days_of_week['Day'] = client_days_of_week['DayOfWeek'].map(day_name_mapping)
 
-    # Find the best unique days to go to the client
+    # Find the best two unique days to go to the client
     best_client_days = client_days_of_week.sort_values(by='total_travel_time').drop_duplicates(subset=['DayOfWeek']).head(2)
 
-    return best_client_days['Day']
+    for _, best_client_day in best_client_days.iterrows():
+        route1, route2 = map(int, best_client_day['Route'].split('+')) if '+' in best_client_day['Route'] else (int(best_client_day['Route']), 0)
+        route_length = df_wouter[(df_wouter['route1'] == route1) & (df_wouter['route2'] == route2)]['total_lenght(km)'].values[0]
+        schedule.append({
+            "Day": best_client_day['Day'],
+            "From": "Home",
+            "To": "Client",
+            "Route": best_client_day['Route'],
+            "Length": route_length,
+            "BaseTravelTime": get_base_travel_time(route1, route2),
+            "PredictedWaitingTime": best_client_day['predicted_waiting_time'],
+            "TotalTravelTime": best_client_day['total_travel_time']
+        })
+
+    # Add home days to schedule
+    home_days = [day for day in days_of_week if day not in [office_day] + list(best_client_days['Day'])]
+    for home_day in home_days:
+        schedule.append({
+            "Day": day_name_mapping[home_day],
+            "From": "-",
+            "To": "-",
+            "Route": "-",
+            "Length": "-",
+            "BaseTravelTime": "-",
+            "PredictedWaitingTime": "-",
+            "TotalTravelTime": "-"
+        })
+
+    # Sort the schedule by day of the week
+    schedule = sorted(schedule, key=lambda x: office_day_mapping[x['Day']])
+
+    return schedule
+
+def get_base_travel_time(route1, route2):
+    matching_rows = df_wouter[(df_wouter['route1'] == route1) & (df_wouter['route2'] == route2)]
+    if not matching_rows.empty:
+        return matching_rows['base_travel_time'].values[0]
+    else:
+        return np.nan
+
+def get_predicted_travel_time(day, route_num, route2=0):
+    features = {
+        'DayOfWeek': day,
+        'RouteNum': route_num,
+        'FileSeverity': default_values['FileSeverity'],
+        'TrafficSeverityNormalized': default_values['TrafficSeverityNormalized'],
+        'WeatherCode': default_values['WeatherCode']
+    }
+    df = pd.DataFrame([features])
+    df = df[['RouteNum', 'FileSeverity', 'TrafficSeverityNormalized', 'WeatherCode', 'DayOfWeek']]  # Ensure correct order of features
+    predicted_waiting_time = model.predict(df)[0]
+    return predicted_waiting_time
+
+def get_total_travel_time(day, route_num, route2=0):
+    base_travel_time = get_base_travel_time(route_num, route2)
+    predicted_waiting_time = get_predicted_travel_time(day, route_num, route2)
+    total_travel_time = base_travel_time + predicted_waiting_time
+    return total_travel_time
 
 # def generate_preferred_schedule(user_preferences):
 #     # Initialize schedule list
@@ -465,25 +440,24 @@ def index():
     print("Final Schedule:", schedule)
     return render_template('schedule.html', schedule=schedule, office_plot_html=office_plot_html, client_plot_html=client_plot_html)
 
+@app.route('/preferences', methods=['GET', 'POST'])
+def preferences():
+    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    if request.method == 'POST':
+        preferences = {day: request.form.get(day) for day in days}
+        schedule = generate_custom_schedule(preferences)
+        return render_template('schedule.html', schedule=schedule)
+    return render_template('preferences.html', days=days)
+
 # @app.route('/preferences', methods=['GET', 'POST'])
 # def preferences():
 #     if request.method == 'POST':
 #         user_selections = {}
 #         for day in day_name_mapping.keys():
 #             user_selections[day] = request.form.get(day)
-#         schedule, office_plot_html, client_plot_html = generate_schedule(user_selections)
-#         return render_template('preferences.html', schedule=schedule, office_plot_html=office_plot_html, client_plot_html=client_plot_html, days=day_name_mapping.keys())
+#         schedule = generate_preferred_schedule(user_selections)
+#         return render_template('preferences.html', schedule=schedule, days=day_name_mapping.keys())
 #     return render_template('preferences.html', days=day_name_mapping.keys())
-
-@app.route('/preferences', methods=['GET', 'POST'])
-def preferences():
-    if request.method == 'POST':
-        user_selections = {}
-        for day in day_name_mapping.keys():
-            user_selections[day] = request.form.get(day)
-        schedule = generate_preferred_schedule(user_selections)
-        return render_template('preferences.html', schedule=schedule, days=day_name_mapping.keys())
-    return render_template('preferences.html', days=day_name_mapping.keys())
 
 if __name__ == '__main__':
     app.run(debug=True)
