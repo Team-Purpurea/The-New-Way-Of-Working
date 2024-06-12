@@ -363,20 +363,16 @@ def get_total_travel_time(day, route_num, route2=0):
     return total_travel_time
 
 
-@app.route('/')
-def index():
-    schedule, office_plot_html, client_plot_html = generate_schedule()
-    print("Final Schedule:", schedule)
-    return render_template('schedule.html', schedule=schedule, office_plot_html=office_plot_html, client_plot_html=client_plot_html)
+# @app.route('/')
+# def index():
+#     schedule, office_plot_html, client_plot_html = generate_schedule()
+#     print("Final Schedule:", schedule)
+#     return render_template('schedule.html', schedule=schedule, office_plot_html=office_plot_html, client_plot_html=client_plot_html)
 
-# @app.route('/preferences', methods=['GET', 'POST'])
-# def preferences():
-#     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-#     if request.method == 'POST':
-#         preferences = {day: request.form.get(day) for day in days}
-#         schedule = generate_custom_schedule(preferences)
-#         return render_template('schedule.html', schedule=schedule)
-#     return render_template('preferences.html', days=days)
+@app.route('/')
+def home():
+    return render_template('preferences.html', days=day_name_mapping.values())
+
 
 @app.route('/submit_preferences', methods=['POST'])
 def submit_preferences():
@@ -407,6 +403,12 @@ def submit_preferences():
 def preferences():
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
     return render_template('preferences.html', days=days)
+
+@app.route('/schedule')
+def index():
+    schedule, office_plot_html, client_plot_html = generate_schedule()
+    print("Final Schedule:", schedule)
+    return render_template('schedule.html', schedule=schedule, office_plot_html=office_plot_html, client_plot_html=client_plot_html)
 
 if __name__ == '__main__':
     app.run(debug=True)

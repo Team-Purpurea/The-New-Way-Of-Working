@@ -5,8 +5,8 @@
     <title>Set Your Preferences</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
     <style>
-        /* Center the Toastr notifications */
-        .toast-center {
+        /* Center the Toastr notifications at the top */
+        .toast-top-center {
             top: 10px;
             right: 0;
             left: 50%;
@@ -19,7 +19,7 @@
     <script>
         $(document).ready(function() {
             toastr.options = {
-                positionClass: 'toast-center', // Center the toast notifications
+                positionClass: 'toast-top-center', // Center the toast notifications at the top
                 closeButton: true,
                 progressBar: true,
                 timeOut: 3000
@@ -99,7 +99,7 @@
         <input type="button" id="reset-button" value="Reset Preferences">
     </form>
     <br>
-    <a href="/">Back to Schedule</a>
+    <a href="/schedule">Fastest Travel Schedule and Statistics</a>
 
     <div id="schedule"></div> <!-- This div will be updated with the schedule -->
 </body>
