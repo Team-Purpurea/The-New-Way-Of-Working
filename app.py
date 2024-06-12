@@ -222,37 +222,43 @@ def generate_custom_schedule(preferences):
     if len(home_days) > 2 or (office_day and len(client_days) > 1):
         raise ValueError("Invalid preferences provided")
 
+    # Initialize remaining_days
+    remaining_days = list(days_of_week)
+
     # Logic for creating the schedule based on preferences
     if len(home_days) == 2:
-        days_of_week = [day for day in days_of_week if day not in home_days]
-        office_day = office_day or min(days_of_week, key=lambda day: get_total_travel_time(day, 2))
-        days_of_week.remove(office_day)
-        client_days = client_days or sorted(days_of_week, key=lambda day: get_total_travel_time(day, 1))[:2]
+        remaining_days = [day for day in remaining_days if day not in home_days]
+        office_day = office_day or min(remaining_days, key=lambda day: get_total_travel_time(day, 2))
+        if office_day in remaining_days:
+            remaining_days.remove(office_day)
+        client_days = client_days or sorted(remaining_days, key=lambda day: get_total_travel_time(day, 1))[:2]
     elif len(home_days) == 1 and not office_day and not client_days:
-        days_of_week.remove(home_days[0])
-        office_day = min(days_of_week, key=lambda day: get_total_travel_time(day, 2))
-        days_of_week.remove(office_day)
-        client_days = sorted(days_of_week, key=lambda day: get_total_travel_time(day, 1))[:2]
+        remaining_days.remove(home_days[0])
+        office_day = min(remaining_days, key=lambda day: get_total_travel_time(day, 2))
+        if office_day in remaining_days:
+            remaining_days.remove(office_day)
+        client_days = sorted(remaining_days, key=lambda day: get_total_travel_time(day, 1))[:2]
     elif len(home_days) == 1 and office_day:
-        days_of_week.remove(home_days[0])
-        client_days = client_days or sorted([day for day in days_of_week if day != office_day], key=lambda day: get_total_travel_time(day, 1))[:2]
+        remaining_days.remove(home_days[0])
+        client_days = client_days or sorted([day for day in remaining_days if day != office_day], key=lambda day: get_total_travel_time(day, 1))[:2]
     elif len(home_days) == 1 and client_days:
-        days_of_week.remove(home_days[0])
-        office_day = office_day or min([day for day in days_of_week if day not in client_days], key=lambda day: get_total_travel_time(day, 2))
-        remaining_days = [day for day in days_of_week if day not in client_days and day != office_day]
+        remaining_days.remove(home_days[0])
+        office_day = office_day or min([day for day in remaining_days if day not in client_days], key=lambda day: get_total_travel_time(day, 2))
+        remaining_days = [day for day in remaining_days if day not in client_days and day != office_day]
         client_days = client_days + sorted(remaining_days, key=lambda day: get_total_travel_time(day, 1))[:2-len(client_days)]
     elif office_day and client_days:
-        remaining_days = [day for day in days_of_week if day != office_day and day not in client_days]
+        remaining_days = [day for day in remaining_days if day != office_day and day not in client_days]
         client_days = client_days + sorted(remaining_days, key=lambda day: get_total_travel_time(day, 1))[:2-len(client_days)]
     elif office_day:
-        remaining_days = [day for day in days_of_week if day != office_day]
+        remaining_days = [day for day in remaining_days if day != office_day]
         client_days = sorted(remaining_days, key=lambda day: get_total_travel_time(day, 1))[:2]
     elif len(client_days) == 2:
-        office_day = min([day for day in days_of_week if day not in client_days], key=lambda day: get_total_travel_time(day, 2))
+        office_day = min([day for day in remaining_days if day not in client_days], key=lambda day: get_total_travel_time(day, 2))
     elif len(client_days) == 1:
-        remaining_days = [day for day in days_of_week if day not in client_days]
+        remaining_days = [day for day in remaining_days if day not in client_days]
         office_day = min(remaining_days, key=lambda day: get_total_travel_time(day, 2))
-        remaining_days.remove(office_day)
+        if office_day in remaining_days:
+            remaining_days.remove(office_day)
         client_days.append(min(remaining_days, key=lambda day: get_total_travel_time(day, 1)))
     else:
         raise ValueError("Invalid preferences provided")
@@ -260,22 +266,25 @@ def generate_custom_schedule(preferences):
     # Debugging information
     print("Final Office day:", office_day)
     print("Final Client days:", client_days)
-    print("Remaining Home days:", [day for day in days_of_week if day not in [office_day] + client_days])
+    print("Remaining Home days:", [day for day in remaining_days if day not in [office_day] + client_days])
 
     # Add office day to schedule
-    schedule.append({
-        "Day": day_name_mapping[office_day],
-        "From": "Home",
-        "To": "Office",
-        "Route": "A2",
-        "Length": df_wouter[(df_wouter['route1'] == 2) & (df_wouter['route2'] == 0)]['total_lenght(km)'].values[0],
-        "BaseTravelTime": get_base_travel_time(2, 0),
-        "PredictedWaitingTime": get_predicted_travel_time(office_day, 2),
-        "TotalTravelTime": get_total_travel_time(office_day, 2)
-    })
+    if office_day is not None:
+        schedule.append({
+            "Day": day_name_mapping[office_day],
+            "From": "Home",
+            "To": "Office",
+            "Route": "A2",
+            "Length": df_wouter[(df_wouter['route1'] == 2) & (df_wouter['route2'] == 0)]['total_lenght(km)'].values[0],
+            "BaseTravelTime": get_base_travel_time(2, 0),
+            "PredictedWaitingTime": get_predicted_travel_time(office_day, 2),
+            "TotalTravelTime": get_total_travel_time(office_day, 2)
+        })
+        if office_day in remaining_days:
+            remaining_days.remove(office_day)
 
     # Predict waiting times for client days
-    available_days = set(days_of_week) - {office_day}
+    available_days = set(remaining_days)
     client_routes = df_wouter[(df_wouter['start'] == 'home') & (df_wouter['arrival'] == 'client')]
     routes = client_routes[['route1', 'route2']].drop_duplicates()
     routes['Route'] = routes.apply(lambda x: f"{x['route1']}+{x['route2']}" if x['route2'] != 0 else str(x['route1']), axis=1)
@@ -302,6 +311,7 @@ def generate_custom_schedule(preferences):
     # Find the best two unique days to go to the client
     best_client_days = client_days_of_week.sort_values(by='total_travel_time').drop_duplicates(subset=['DayOfWeek']).head(2)
 
+    final_client_days = set()
     for _, best_client_day in best_client_days.iterrows():
         route1, route2 = map(int, best_client_day['Route'].split('+')) if '+' in best_client_day['Route'] else (int(best_client_day['Route']), 0)
         route_length = df_wouter[(df_wouter['route1'] == route1) & (df_wouter['route2'] == route2)]['total_lenght(km)'].values[0]
@@ -315,10 +325,30 @@ def generate_custom_schedule(preferences):
             "PredictedWaitingTime": best_client_day['predicted_waiting_time'],
             "TotalTravelTime": best_client_day['total_travel_time']
         })
+        final_client_days.add(best_client_day['DayOfWeek'])
 
     # Add home days to schedule
-    home_days = [day for day in days_of_week if day not in [office_day] + list(best_client_days['Day'])]
-    for home_day in home_days:
+    final_home_days = set(home_days)
+    if len(final_client_days) < 2:
+        available_days = set(remaining_days) - final_client_days
+        additional_client_days = sorted(available_days, key=lambda day: get_total_travel_time(day, 1))[:2-len(final_client_days)]
+        for day in additional_client_days:
+            final_client_days.add(day)
+            route1, route2 = 2, 50  # Assuming a default client route
+            route_length = df_wouter[(df_wouter['route1'] == route1) & (df_wouter['route2'] == route2)]['total_lenght(km)'].values[0]
+            schedule.append({
+                "Day": day_name_mapping[day],
+                "From": "Home",
+                "To": "Client",
+                "Route": f"{route1}+{route2}",
+                "Length": route_length,
+                "BaseTravelTime": get_base_travel_time(route1, route2),
+                "PredictedWaitingTime": get_predicted_travel_time(day, route1),
+                "TotalTravelTime": get_total_travel_time(day, route1)
+            })
+
+    final_home_days.update(set(days_of_week) - {office_day} - final_client_days)
+    for home_day in final_home_days:
         schedule.append({
             "Day": day_name_mapping[home_day],
             "From": "-",
@@ -331,7 +361,7 @@ def generate_custom_schedule(preferences):
         })
 
     # Sort the schedule by day of the week
-    schedule = sorted(schedule, key=lambda x: office_day_mapping[x['Day']])
+    schedule = sorted(schedule, key=lambda x: inverse_day_name_mapping[x['Day']])
 
     return schedule
 
