@@ -1,0 +1,24 @@
+<table border="1">
+    <tr>
+        <th>Day</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Route</th>
+        <th>Length (km)</th>
+        <th>Base Travel Time (minutes)</th>
+        <th>Predicted Waiting Time (minutes)</th>
+        <th>Total Travel Time (minutes)</th>
+    </tr>
+    {% for entry in schedule %}
+    <tr>
+        <td>{{ entry.Day }}</td>
+        <td>{{ entry.From }}</td>
+        <td>{{ entry.To }}</td>
+        <td>{{ entry.Route }}</td>
+        <td>{{ entry.Length }}</td>
+        <td>{{ entry.BaseTravelTime }}</td>
+        <td>{{ entry.PredictedWaitingTime }}</td>
+        <td>{{ entry.TotalTravelTime }}</td>
+    </tr>
+    {% endfor %}
+</table>

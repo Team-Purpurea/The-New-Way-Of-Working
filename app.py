@@ -5,6 +5,7 @@ from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
 import os
 import plotly.graph_objects as go
+from flask import jsonify
 
 app = Flask(__name__)
 
@@ -361,78 +362,6 @@ def get_total_travel_time(day, route_num, route2=0):
     total_travel_time = base_travel_time + predicted_waiting_time
     return total_travel_time
 
-# def generate_preferred_schedule(user_preferences):
-#     # Initialize schedule list
-#     schedule = []
-
-#     # Predict waiting times for each day of the week for the office
-#     office_days_of_week = pd.DataFrame({
-#         'RouteNum': [2] * 5,  # A2 for office
-#         'FileSeverity': [default_values['FileSeverity']] * 5,
-#         'TrafficSeverityNormalized': [default_values.get('TrafficSeverityNormalized', np.nan)] * 5,
-#         'WeatherCode': [default_values['WeatherCode']] * 5,
-#         'DayOfWeek': range(5)  # Monday to Friday
-#     })
-
-#     office_days_of_week = office_days_of_week[features]  # Ensure correct order
-#     office_days_of_week['predicted_waiting_time'] = model.predict(office_days_of_week)
-
-#     office_days_of_week['base_travel_time'] = get_base_travel_time(2, 0)
-#     office_days_of_week['total_travel_time'] = office_days_of_week['predicted_waiting_time'] + office_days_of_week['base_travel_time']
-#     office_days_of_week['Day'] = office_days_of_week['DayOfWeek'].map(office_day_mapping)
-
-#     # Find the best day to go to the office based on user preference
-#     if 'Office' in user_preferences.values():
-#         best_office_day = office_days_of_week.loc[office_days_of_week['Day'] == max(user_preferences, key=user_preferences.get)].iloc[0]
-#     else:
-#         best_office_day = office_days_of_week.sort_values(by='total_travel_time').iloc[0]
-
-#     # Add office day to schedule if it's selected
-#     if user_preferences.get(best_office_day['Day']) == 'Office':
-#         schedule.append({
-#             "Day": best_office_day['Day'],
-#             "From": "Home",
-#             "To": "Office",
-#             "Route": "A2",
-#             "Length": df_wouter[(df_wouter['route1'] == 2) & (df_wouter['route2'] == 0)]['total_lenght(km)'].values[0],
-#             "BaseTravelTime": best_office_day['base_travel_time'],
-#             "PredictedWaitingTime": best_office_day['predicted_waiting_time'],
-#             "TotalTravelTime": best_office_day['total_travel_time']
-#         })
-
-#     # Handle client days
-#     client_days = [day for day, preference in user_preferences.items() if preference == 'Client']
-#     for client_day in client_days:
-#         best_client_day = office_days_of_week.loc[office_days_of_week['Day'] == client_day].iloc[0]
-#         schedule.append({
-#             "Day": best_client_day['Day'],
-#             "From": "Home",
-#             "To": "Client",
-#             "Route": "2+50",  # Assuming fixed route for client
-#             "Length": 108.0,  # Assuming fixed length for client route
-#             "BaseTravelTime": get_base_travel_time(2, 50),  # Assuming fixed base travel time
-#             "PredictedWaitingTime": best_client_day['predicted_waiting_time'],
-#             "TotalTravelTime": best_client_day['total_travel_time']
-#         })
-
-#     # Handle home days
-#     home_days = [day for day, preference in user_preferences.items() if preference == 'No Preference']
-#     for home_day in home_days:
-#         schedule.append({
-#             "Day": home_day,
-#             "From": "-",
-#             "To": "-",
-#             "Route": "-",
-#             "Length": "-",
-#             "BaseTravelTime": "-",
-#             "PredictedWaitingTime": "-",
-#             "TotalTravelTime": "-"
-#         })
-
-#     # Sort the schedule by day of the week
-#     schedule = sorted(schedule, key=lambda x: day_name_mapping[x['Day']])
-
-#     return schedule
 
 @app.route('/')
 def index():
@@ -440,24 +369,46 @@ def index():
     print("Final Schedule:", schedule)
     return render_template('schedule.html', schedule=schedule, office_plot_html=office_plot_html, client_plot_html=client_plot_html)
 
+# @app.route('/preferences', methods=['GET', 'POST'])
+# def preferences():
+#     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+#     if request.method == 'POST':
+#         preferences = {day: request.form.get(day) for day in days}
+#         schedule = generate_custom_schedule(preferences)
+#         return render_template('schedule.html', schedule=schedule)
+#     return render_template('preferences.html', days=days)
+
+@app.route('/submit_preferences', methods=['POST'])
+def submit_preferences():
+    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    preferences = {day: request.form.get(day) for day in days}
+    
+    home_count = sum(1 for pref in preferences.values() if pref == 'Home')
+    office_count = sum(1 for pref in preferences.values() if pref == 'Office')
+    client_count = sum(1 for pref in preferences.values() if pref == 'Client')
+
+    if home_count > 2:
+        return jsonify({"error": "You can only select up to 2 home days."}), 400
+    if office_count > 1:
+        return jsonify({"error": "You can only select 1 office day."}), 400
+    if (home_count + office_count + client_count) > 2:
+        return jsonify({"error": "You can only select up to 2 preferences in total."}), 400
+
+    try:
+        schedule = generate_custom_schedule(preferences)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    
+    schedule_html = render_template('schedule_partial.html', schedule=schedule)
+    
+    return jsonify(schedule_html)
+
 @app.route('/preferences', methods=['GET', 'POST'])
 def preferences():
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-    if request.method == 'POST':
-        preferences = {day: request.form.get(day) for day in days}
-        schedule = generate_custom_schedule(preferences)
-        return render_template('schedule.html', schedule=schedule)
     return render_template('preferences.html', days=days)
-
-# @app.route('/preferences', methods=['GET', 'POST'])
-# def preferences():
-#     if request.method == 'POST':
-#         user_selections = {}
-#         for day in day_name_mapping.keys():
-#             user_selections[day] = request.form.get(day)
-#         schedule = generate_preferred_schedule(user_selections)
-#         return render_template('preferences.html', schedule=schedule, days=day_name_mapping.keys())
-#     return render_template('preferences.html', days=day_name_mapping.keys())
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+    

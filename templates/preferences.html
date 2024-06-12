@@ -3,6 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <title>Set Your Preferences</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        /* Center the Toastr notifications */
+        .toast-center {
+            top: 10px;
+            right: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: fit-content;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            toastr.options = {
+                positionClass: 'toast-center', // Center the toast notifications
+                closeButton: true,
+                progressBar: true,
+                timeOut: 3000
+            };
+
+            $('form').on('submit', function(event) {
+                event.preventDefault(); // Prevent the form from submitting via the browser
+
+                // Client-side validation
+                let preferences = $(this).serializeArray();
+                let homeCount = 0, officeCount = 0, clientCount = 0;
+
+                preferences.forEach(function(pref) {
+                    if (pref.value === 'Home') homeCount++;
+                    if (pref.value === 'Office') officeCount++;
+                    if (pref.value === 'Client') clientCount++;
+                });
+
+                if (homeCount > 2) {
+                    toastr.error('You can only select up to 2 home days.');
+                    return;
+                }
+                if (officeCount > 1) {
+                    toastr.error('You can only select 1 office day.');
+                    return;
+                }
+                if ((homeCount + officeCount + clientCount) > 2) {
+                    toastr.error('You can only select up to 2 preferences in total.');
+                    return;
+                }
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/submit_preferences',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        $('#schedule').html(response); // Update the content of the #schedule div
+                    },
+                    error: function(response) {
+                        let errorMessage = response.responseJSON.error;
+                        toastr.error(errorMessage); // Show error message from server-side validation
+                    }
+                });
+            });
+
+            $('#reset-button').on('click', function() {
+                $('form')[0].reset(); // Reset the form fields
+                $('#schedule').html(''); // Clear the schedule div
+            });
+        });
+    </script>
 </head>
 <body>
     <h1>Set Your Preferences</h1>
@@ -28,36 +96,11 @@
         </table>
         <br>
         <input type="submit" value="Submit Preferences">
+        <input type="button" id="reset-button" value="Reset Preferences">
     </form>
     <br>
     <a href="/">Back to Schedule</a>
 
-    {% if schedule %}
-    <h2>Your Customized Schedule</h2>
-    <table border="1">
-        <tr>
-            <th>Day</th>
-            <th>From</th>
-            <th>To</th>
-            <th>Route</th>
-            <th>Length (km)</th>
-            <th>Base Travel Time (minutes)</th>
-            <th>Predicted Waiting Time (minutes)</th>
-            <th>Total Travel Time (minutes)</th>
-        </tr>
-        {% for entry in schedule %}
-        <tr>
-            <td>{{ entry.Day }}</td>
-            <td>{{ entry.From }}</td>
-            <td>{{ entry.To }}</td>
-            <td>{{ entry.Route }}</td>
-            <td>{{ entry.Length }}</td>
-            <td>{{ entry.BaseTravelTime }}</td>
-            <td>{{ entry.PredictedWaitingTime }}</td>
-            <td>{{ entry.TotalTravelTime }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% endif %}
+    <div id="schedule"></div> <!-- This div will be updated with the schedule -->
 </body>
 </html>
