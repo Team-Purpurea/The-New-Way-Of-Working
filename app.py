@@ -1,7 +1,9 @@
 from flask import Flask, render_template, request
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from xgboost import XGBRegressor
+
 import matplotlib.pyplot as plt
 import os
 import plotly.graph_objects as go
@@ -16,7 +18,8 @@ inverse_day_name_mapping = {v: k for k, v in day_name_mapping.items()}
 # Load your model and data here
 def load_model_and_data():
     # Load the pre-trained model
-    model = RandomForestRegressor()
+    # model = RandomForestRegressor()
+    model = XGBRegressor()
 
     # Load the modified data
     df_filtered = pd.read_csv('df_latest_waiting_times.csv', low_memory=False)
@@ -201,8 +204,6 @@ def generate_schedule():
 
     return schedule, office_plot_html, client_plot_html
 
-
-
 def generate_custom_schedule(preferences):
     print("Received preferences:", preferences)
     # Initialize schedule list
@@ -285,17 +286,27 @@ def generate_custom_schedule(preferences):
             remaining_days.remove(office_day)
 
     # Add client days to schedule
+    client_routes = df_wouter[(df_wouter['start'] == 'home') & (df_wouter['arrival'] == 'client')]
     for client_day in client_days:
-        schedule.append({
-            "Day": day_name_mapping[client_day],
-            "From": "Home",
-            "To": "Client",
-            "Route": "2+50",  # Assuming default client route 2+50
-            "Length": df_wouter[(df_wouter['route1'] == 2) & (df_wouter['route2'] == 50)]['total_lenght(km)'].values[0],
-            "BaseTravelTime": get_base_travel_time(2, 50),
-            "PredictedWaitingTime": get_predicted_travel_time(client_day, 2, 50),
-            "TotalTravelTime": get_total_travel_time(client_day, 2, 50)
-        })
+        best_route = None
+        best_total_travel_time = float('inf')
+        for _, route in client_routes.iterrows():
+            total_travel_time = get_total_travel_time(client_day, route['route1'], route['route2'])
+            if total_travel_time < best_total_travel_time:
+                best_total_travel_time = total_travel_time
+                best_route = route
+
+        if best_route is not None:
+            schedule.append({
+                "Day": day_name_mapping[client_day],
+                "From": "Home",
+                "To": "Client",
+                "Route": f"{best_route['route1']}+{best_route['route2']}" if best_route['route2'] != 0 else str(best_route['route1']),
+                "Length": best_route['total_lenght(km)'],
+                "BaseTravelTime": get_base_travel_time(best_route['route1'], best_route['route2']),
+                "PredictedWaitingTime": get_predicted_travel_time(client_day, best_route['route1'], best_route['route2']),
+                "TotalTravelTime": best_total_travel_time
+            })
         if client_day in remaining_days:
             remaining_days.remove(client_day)
 
@@ -306,16 +317,25 @@ def generate_custom_schedule(preferences):
         additional_client_days = sorted(available_days, key=lambda day: get_total_travel_time(day, 1))[:2-len(client_days)]
         for day in additional_client_days:
             client_days.append(day)
-            schedule.append({
-                "Day": day_name_mapping[day],
-                "From": "Home",
-                "To": "Client",
-                "Route": "2+50",
-                "Length": df_wouter[(df_wouter['route1'] == 2) & (df_wouter['route2'] == 50)]['total_lenght(km)'].values[0],
-                "BaseTravelTime": get_base_travel_time(2, 50),
-                "PredictedWaitingTime": get_predicted_travel_time(day, 2, 50),
-                "TotalTravelTime": get_total_travel_time(day, 2, 50)
-            })
+            best_route = None
+            best_total_travel_time = float('inf')
+            for _, route in client_routes.iterrows():
+                total_travel_time = get_total_travel_time(day, route['route1'], route['route2'])
+                if total_travel_time < best_total_travel_time:
+                    best_total_travel_time = total_travel_time
+                    best_route = route
+
+            if best_route is not None:
+                schedule.append({
+                    "Day": day_name_mapping[day],
+                    "From": "Home",
+                    "To": "Client",
+                    "Route": f"{best_route['route1']}+{best_route['route2']}" if best_route['route2'] != 0 else str(best_route['route1']),
+                    "Length": best_route['total_lenght(km)'],
+                    "BaseTravelTime": get_base_travel_time(best_route['route1'], best_route['route2']),
+                    "PredictedWaitingTime": get_predicted_travel_time(day, best_route['route1'], best_route['route2']),
+                    "TotalTravelTime": best_total_travel_time
+                })
 
     final_home_days.update(set(days_of_week) - {office_day} - set(client_days))
     for home_day in final_home_days:
