@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Set Your Preferences</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
     <style>
         /* Center the Toastr notifications at the top */
@@ -12,6 +13,20 @@
             left: 50%;
             transform: translateX(-50%);
             width: fit-content;
+        }
+        .bg-primary {
+            background-color: #16345F !important;
+        }
+        .text-primary {
+            color: #16345F !important;
+        }
+        .btn-secondary {
+            background-color: #EA6209 !important;
+            border-color: #EA6209 !important;
+        }
+        .btn-info {
+            background-color: #EA6209 !important;
+            border-color: #EA6209 !important;
         }
     </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -72,35 +87,44 @@
         });
     </script>
 </head>
-<body>
-    <h1>Set Your Preferences</h1>
-    <form method="post">
-        <table border="1">
-            <tr>
-                <th>Day</th>
-                <th>Preference</th>
-            </tr>
-            {% for day in days %}
-            <tr>
-                <td>{{ day }}</td>
-                <td>
-                    <select name="{{ day }}">
-                        <option value="No Preference">No Preference</option>
-                        <option value="Home">Day to Stay Home</option>
-                        <option value="Office">Day to Go to Office</option>
-                        <option value="Client">Day to Go to Client</option>
-                    </select>
-                </td>
-            </tr>
-            {% endfor %}
-        </table>
-        <br>
-        <input type="submit" value="Submit Preferences">
-        <input type="button" id="reset-button" value="Reset Preferences">
-    </form>
-    <br>
-    <a href="/schedule">Fastest Travel Schedule and Statistics</a>
-
-    <div id="schedule"></div> <!-- This div will be updated with the schedule -->
+<body class="bg-light">
+    <div class="container mt-5">
+        <h1 class="text-center">Set Your Preferences</h1>
+        <form method="post" class="mt-4">
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead class="bg-primary text-white">
+                        <tr>
+                            <th>Day</th>
+                            <th>Preference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for day in days %}
+                        <tr>
+                            <td>{{ day }}</td>
+                            <td>
+                                <select name="{{ day }}" class="form-control">
+                                    <option value="No Preference">No Preference</option>
+                                    <option value="Home">Day to Stay Home</option>
+                                    <option value="Office">Day to Go to Office</option>
+                                    <option value="Client">Day to Go to Client</option>
+                                </select>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>    
+            </div>
+            <div class="text-center">
+                <input type="submit" class="btn btn-primary" value="Submit Preferences">
+                <input type="button" id="reset-button" class="btn btn-warning" value="Reset Preferences">
+            </div>
+        </form>
+        <div class="text-center mt-3">
+            <a href="/schedule" class="btn btn-info">Back to Schedule</a>
+        </div>
+        <div id="schedule" class="mt-4"></div> <!-- This div will be updated with the schedule -->
+    </div>
 </body>
 </html>

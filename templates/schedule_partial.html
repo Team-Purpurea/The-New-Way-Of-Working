@@ -1,24 +1,61 @@
-<table border="1">
-    <tr>
-        <th>Day</th>
-        <th>From</th>
-        <th>To</th>
-        <th>Route</th>
-        <th>Length (km)</th>
-        <th>Base Travel Time (minutes)</th>
-        <th>Predicted Waiting Time (minutes)</th>
-        <th>Total Travel Time (minutes)</th>
-    </tr>
-    {% for entry in schedule %}
-    <tr>
-        <td>{{ entry.Day }}</td>
-        <td>{{ entry.From }}</td>
-        <td>{{ entry.To }}</td>
-        <td>{{ entry.Route }}</td>
-        <td>{{ entry.Length }}</td>
-        <td>{{ entry.BaseTravelTime }}</td>
-        <td>{{ entry.PredictedWaitingTime }}</td>
-        <td>{{ entry.TotalTravelTime }}</td>
-    </tr>
-    {% endfor %}
-</table>
+<!-- <div class="table-responsive">
+    <table class="table table-bordered">
+        <thead class="thead-dark">
+            <tr>
+                <th>Day</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Route</th>
+                <th>Length (km)</th>
+                <th>Base Travel Time (minutes)</th>
+                <th>Predicted Waiting Time (minutes)</th>
+                <th>Total Travel Time (minutes)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in schedule %}
+            <tr>
+                <td>{{ entry.Day }}</td>
+                <td>{{ entry.From }}</td>
+                <td>{{ entry.To }}</td>
+                <td>{{ entry.Route }}</td>
+                <td>{{ entry.Length }}</td>
+                <td>{{ "%.2f"|format(entry.BaseTravelTime|float) if entry.BaseTravelTime not in ["-", ""] else entry.BaseTravelTime }}</td>
+                <td>{{ "%.2f"|format(entry.PredictedWaitingTime|float) if entry.PredictedWaitingTime not in ["-", ""] else entry.PredictedWaitingTime }}</td>
+                <td>{{ "%.2f"|format(entry.TotalTravelTime|float) if entry.TotalTravelTime not in ["-", ""] else entry.TotalTravelTime }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div> -->
+
+<div class="table-responsive">
+    <table class="table table-bordered">
+        <thead class="bg-primary text-white">
+            <tr>
+                <th>Day</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Route</th>
+                <th>Length (km)</th>
+                <th>Base Travel Time (minutes)</th>
+                <th>Predicted Waiting Time (minutes)</th>
+                <th>Total Travel Time (minutes)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in schedule %}
+            <tr>
+                <td>{{ entry.Day }}</td>
+                <td>{{ entry.From }}</td>
+                <td>{{ entry.To }}</td>
+                <td>{{ entry.Route }}</td>
+                <td>{{ entry.Length }}</td>
+                <td>{{ "%.2f"|format(entry.BaseTravelTime|float) if entry.BaseTravelTime not in ["-", ""] else entry.BaseTravelTime }}</td>
+                <td>{{ "%.2f"|format(entry.PredictedWaitingTime|float) if entry.PredictedWaitingTime not in ["-", ""] else entry.PredictedWaitingTime }}</td>
+                <td>{{ "%.2f"|format(entry.TotalTravelTime|float) if entry.TotalTravelTime not in ["-", ""] else entry.TotalTravelTime }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
